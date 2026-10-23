@@ -2,6 +2,7 @@
 (() => {
   "use strict";
 
+  const { locale, t } = window.RadarI18n;
   const PAGE_SIZE = 50;
   const CONTRIBUTING_PATHS = new Set([
     "CONTRIBUTING.md",
@@ -36,8 +37,8 @@
   let shown = 0;
   let previousQueryTerms = new Set();
 
-  const numberFormat = new Intl.NumberFormat("en");
-  const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+  const numberFormat = new Intl.NumberFormat(locale);
+  const compact = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 });
 
   // ---- Theme -------------------------------------------------------------------------------
 
@@ -54,18 +55,18 @@
 
   function daysAgo(isoDate) {
     const days = Math.floor((Date.now() - new Date(isoDate + "T00:00:00Z").getTime()) / 86400000);
-    if (days <= 0) return "updated today";
-    if (days === 1) return "updated yesterday";
-    if (days < 60) return `updated ${days} days ago`;
+    if (days <= 0) return t("time.today");
+    if (days === 1) return t("time.yesterday");
+    if (days < 60) return t("time.days", { count: numberFormat.format(days) });
     if (days >= 365) {
       const years = Math.floor(days / 365);
-      return `updated ${years} year${years === 1 ? "" : "s"} ago`;
+      return t(years === 1 ? "time.year" : "time.years", { count: numberFormat.format(years) });
     }
-    return `updated ${Math.min(11, Math.round(days / 30))} months ago`;
+    return t("time.months", { count: numberFormat.format(Math.min(11, Math.round(days / 30))) });
   }
 
   function pushedAgo(isoDate) {
-    return daysAgo(isoDate).replace(/^updated/, "pushed");
+    return daysAgo(isoDate).replace(t("time.updatedPrefix"), t("time.pushedPrefix"));
   }
 
   function readFilters() {
@@ -137,6 +138,11 @@
     return CONTRIBUTING_PATHS.has(repo.contributing) ? repo.contributing : null;
   }
 
+  function topicTitle(slug) {
+    const translated = t(`topic.${slug}`);
+    return translated.startsWith("topic.") ? (data.topic_titles?.[slug] || slug) : translated;
+  }
+
   function matchesRules(repo, rule) {
     const policy = repo.policy || {};
     if (rule === "contributing") return contributingPath(repo) !== null;
@@ -205,7 +211,7 @@
       document.title = originalTitle;
     } else {
       const issueCount = numberFormat.format(filtered.length);
-      const countLabel = `${issueCount} ${filtered.length === 1 ? "issue" : "issues"}`;
+      const countLabel = `${issueCount} ${t(filtered.length === 1 ? "title.issue" : "title.issues")}`;
       const scope = values.repo || values.language;
       document.title = scope
         ? `${scope} · ${countLabel} · Open Source Radar`
@@ -214,13 +220,16 @@
 
     const projectCount = new Set(filtered.map((issue) => issue.repo)).size;
     summary.innerHTML = filtered.length
-      ? `<strong>${numberFormat.format(filtered.length)}</strong> issues in <strong>${numberFormat.format(projectCount)}</strong> projects match.`
-      : "No issues match these filters.";
+      ? t("summary.match", {
+        issues: numberFormat.format(filtered.length),
+        projects: numberFormat.format(projectCount),
+      })
+      : t("results.empty");
     const languageSlug = data.language_slugs?.[values.language];
     languageFeed.hidden = !languageSlug;
     if (languageSlug) {
       languageFeedLink.href = `feeds/${languageSlug}.xml`;
-      languageFeedLink.textContent = `RSS feed for ${values.language} beginner issues`;
+      languageFeedLink.textContent = t("feed.language", { name: values.language });
     }
 
     const hasTopicFeed = data.topic_feed_slugs?.includes(values.topic);
@@ -228,8 +237,7 @@
 
     if (hasTopicFeed) {
       topicFeedLink.href = `feeds/topics/${values.topic}.xml`;
-      const topicTitle = data.topic_titles?.[values.topic];
-      topicFeedLink.textContent = `RSS feed for ${topicTitle} beginner issues`;
+      topicFeedLink.textContent = t("feed.topic", { name: topicTitle(values.topic) });
     }
     renderRepoCard(values.repo);
     empty.hidden = filtered.length > 0;
@@ -264,13 +272,15 @@
     const facts = document.createElement("p");
     facts.className = "issue-meta";
     const parts = [
-      `${compact.format(repo.stars)} stars`,
-      `${compact.format(repo.forks || 0)} forks`,
+      t("repo.stars", { count: compact.format(repo.stars) }),
+      t("repo.forks", { count: compact.format(repo.forks || 0) }),
     ];
     if (repo.license && repo.license !== "NOASSERTION") parts.push(repo.license);
     if (repo.pushed) parts.push(pushedAgo(repo.pushed));
     if (typeof repo.open_count === "number") {
-      parts.push(`${numberFormat.format(repo.open_count)} open newcomer ${repo.open_count === 1 ? "issue" : "issues"}`);
+      parts.push(t(repo.open_count === 1 ? "repo.openOne" : "repo.openMany", {
+        count: numberFormat.format(repo.open_count),
+      }));
     }
     for (const text of parts) {
       const span = document.createElement("span");
@@ -283,7 +293,7 @@
       link.href = `${repo.url}/blob/HEAD/${guide}`;
       link.target = "_blank";
       link.rel = "noopener";
-      link.textContent = "Contributing guide";
+      link.textContent = t("repo.guide");
       facts.append(link);
     }
     repoCard.append(facts);
@@ -291,7 +301,7 @@
     const clear = document.createElement("button");
     clear.type = "button";
     clear.className = "link-button";
-    clear.textContent = "Show all projects";
+    clear.textContent = t("repo.showAll");
     clear.addEventListener("click", () => setRepo(""));
     repoCard.append(clear);
   }
@@ -328,24 +338,26 @@
     repoLink.href = repo.url;
     repoLink.textContent = issue.repo;
     const onlyRepo = node.querySelector(".only-repo");
-    onlyRepo.setAttribute("aria-label", `Show only issues from ${issue.repo}`);
+    onlyRepo.textContent = t("issue.onlyProject");
+    onlyRepo.setAttribute("aria-label", t("issue.onlyAria", { name: issue.repo }));
     onlyRepo.addEventListener("click", () => setRepo(issue.repo));
-    node.querySelector(".stars").textContent = `${compact.format(repo.stars)} stars`;
+    node.querySelector(".stars").textContent = t("repo.stars", { count: compact.format(repo.stars) });
     node.querySelector(".lang").textContent = repo.language || "";
     node.querySelector(".license").textContent = repo.license && repo.license !== "NOASSERTION" ? repo.license : "";
     node.querySelector(".updated").textContent = daysAgo(issue.updated);
     node.querySelector(".opened").textContent =
-      daysAgo(issue.created).replace(/^updated/, "opened");
+      daysAgo(issue.created).replace(t("time.updatedPrefix"), t("time.openedPrefix"));
     node.querySelector(".repo-desc").textContent = repo.description || "";
 
     const labels = node.querySelector(".labels");
+    labels.setAttribute("aria-label", t("issue.labels"));
     const extra = issue.labels.filter((name) => !LEVEL_LABELS.has(name.toLowerCase()));
     for (const name of extra.slice(0, MAX_LABELS)) {
       const item = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = name;
-      button.title = `Search for "${name}"`;
+      button.title = t("issue.searchLabel", { name });
       button.addEventListener("click", () => {
         form.elements.q.value = name;
         applyFilters(true);
@@ -356,36 +368,39 @@
     if (extra.length > MAX_LABELS) {
       const item = document.createElement("li");
       item.className = "labels-more";
-      item.textContent = `+${extra.length - MAX_LABELS} more`;
+      item.textContent = t("issue.moreLabels", { count: numberFormat.format(extra.length - MAX_LABELS) });
       labels.append(item);
     }
     if (!labels.children.length) labels.remove();
 
     const level = node.querySelector(".level");
     level.classList.add(issue.level);
-    level.textContent = issue.level === "beginner" ? "Beginner label" : "Help wanted";
+    level.textContent = t(issue.level === "beginner" ? "issue.beginner" : "issue.helpWanted");
 
     const comments = node.querySelector(".comments");
-    comments.textContent = issue.comments === 1 ? "1 comment" : `${issue.comments} comments`;
+    comments.textContent = issue.comments === 1
+      ? t("issue.oneComment")
+      : t("issue.comments", { count: numberFormat.format(issue.comments) });
     if (issue.maintainer_replied === true) {
       const reply = document.createElement("span");
       reply.className = "comments";
-      reply.textContent = "Maintainer replied";
-      reply.title = "The latest fetched comment is from a repository owner, member or collaborator.";
+      reply.textContent = t("issue.maintainerReplied");
+      reply.title = t("issue.maintainerRepliedTitle");
       comments.after(reply);
     }
 
     const badges = node.querySelector(".badges");
+    badges.setAttribute("aria-label", t("issue.rules"));
     const policy = repo.policy || {};
     const fileUrl = (path) => `${repo.url}/blob/HEAD/${path}`;
-    if (policy.ai === "restricted") badge(badges, "AI restricted", fileUrl(policy.ai_file), "ai-restricted");
-    if (policy.ai === "disclose") badge(badges, "Disclose AI use", fileUrl(policy.ai_file));
-    if (policy.ai === "policy") badge(badges, "AI policy", fileUrl(policy.ai_file));
+    if (policy.ai === "restricted") badge(badges, t("badge.aiRestricted"), fileUrl(policy.ai_file), "ai-restricted");
+    if (policy.ai === "disclose") badge(badges, t("badge.aiDisclose"), fileUrl(policy.ai_file));
+    if (policy.ai === "policy") badge(badges, t("badge.aiPolicy"), fileUrl(policy.ai_file));
     if (policy.cla) badge(badges, "CLA");
-    if (policy.dco) badge(badges, "DCO sign-off");
+    if (policy.dco) badge(badges, t("badge.dco"));
     const guide = contributingPath(repo);
-    if (guide) badge(badges, "Contributing guide", fileUrl(guide));
-    if (issue.closed_pr) badge(badges, "Earlier PR closed", issue.url);
+    if (guide) badge(badges, t("badge.guide"), fileUrl(guide));
+    if (issue.closed_pr) badge(badges, t("badge.closedPr"), issue.url);
     if (!badges.children.length) badges.remove();
 
     return node;
@@ -398,7 +413,10 @@
     list.append(fragment);
     shown += next.length;
     more.hidden = shown >= filtered.length;
-    moreButton.textContent = `Show ${Math.min(PAGE_SIZE, filtered.length - shown)} more of ${numberFormat.format(filtered.length - shown)}`;
+    moreButton.textContent = t("more", {
+      shown: numberFormat.format(Math.min(PAGE_SIZE, filtered.length - shown)),
+      remaining: numberFormat.format(filtered.length - shown),
+    });
   }
 
   function populateSelect(select, options) {
@@ -418,7 +436,7 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       data = await response.json();
     } catch (error) {
-      summary.textContent = "The issue list could not be loaded. Reload the page, or browse the lists on GitHub.";
+      summary.textContent = t("load.error");
       return;
     }
 
@@ -430,22 +448,21 @@
       if (repo.language) languageCounts.set(repo.language, (languageCounts.get(repo.language) || 0) + 1);
       for (const bucket of repo.buckets) topicCounts.set(bucket, (topicCounts.get(bucket) || 0) + 1);
     }
-    const titles = data.topic_titles || {};
     populateSelect(
       form.elements.language,
       [...languageCounts].sort((a, b) => b[1] - a[1]).map(([name, count]) => [name, `${name} (${count})`]),
     );
     populateSelect(
       form.elements.topic,
-      [...topicCounts].sort((a, b) => b[1] - a[1]).map(([slug, count]) => [slug, `${titles[slug] || slug} (${count})`]),
+      [...topicCounts].sort((a, b) => b[1] - a[1]).map(([slug, count]) => [slug, `${topicTitle(slug)} (${count})`]),
     );
 
     const when = new Date(data.generated_at);
-    updated.textContent = `Issues collected from the GitHub API on ${when.toLocaleString("en", {
+    updated.textContent = t("footer.updated", { date: when.toLocaleString(locale, {
       dateStyle: "medium",
       timeStyle: "short",
       timeZone: "UTC",
-    })} UTC. The list refreshes every 12 hours.`;
+    }) });
 
     restoreFromUrl();
     previousQueryTerms = new Set();
@@ -506,9 +523,9 @@
       } catch (error) {
         return; // clipboard unavailable (e.g. file:// in some browsers): leave the button as is
       }
-      queryCopy.textContent = "Copied";
+      queryCopy.textContent = t("query.copied");
       clearTimeout(copyTimer);
-      copyTimer = setTimeout(() => { queryCopy.textContent = "Copy"; }, 1500);
+      copyTimer = setTimeout(() => { queryCopy.textContent = t("query.copy"); }, 1500);
     });
   }
 
