@@ -171,7 +171,8 @@
       if (values.signal && !matchesSignal(issue, values.signal)) return false;
       if (values.repo && issue.repo !== values.repo) return false;
       if (words.length) {
-        const haystack = `${issue.title} ${issue.repo} ${issue.labels.join(" ")} ${repo.description}`.toLowerCase();
+        const license = repo.license && repo.license !== "NOASSERTION" ? repo.license : "";
+        const haystack = `${issue.title} ${issue.repo} ${issue.labels.join(" ")} ${repo.description} ${license}`.toLowerCase();
         if (!words.every(word => haystack.includes(word))) return false;
       }
       return true;
